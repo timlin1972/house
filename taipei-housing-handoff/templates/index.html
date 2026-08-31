@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>台北房屋觀察簿</title>
+<style>
+  body { font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif; margin: 0; padding: 16px; background: #f5f5f5; color: #222; }
+  h1 { font-size: 1.4em; margin: 0; }
+  h2 { font-size: 1.1em; margin: 0 0 12px; border-bottom: 2px solid #ddd; padding-bottom: 4px; }
+
+  .header-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+  .header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .add-group-inline { display: flex; gap: 6px; align-items: center; }
+  .add-group-inline input { padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.85em; }
+  .add-group-inline input[name=name] { width: 140px; }
+  .add-group-inline input[name=search_url] { width: 220px; }
+  .add-group-inline button { background: #555; color: white; border: none; border-radius: 6px; padding: 7px 10px; cursor: pointer; font-size: 0.85em; white-space: nowrap; }
+  .run-now-btn { background: #06c; color: white; border: none; border-radius: 6px; padding: 8px 14px; font-size: 0.9em; cursor: pointer; white-space: nowrap; }
+  .run-now-btn:disabled { background: #999; cursor: default; }
+
+  .banner { border-radius: 8px; padding: 10px 16px; margin-bottom: 16px; font-size: 0.9em; display: none; }
+  .banner.show { display: block; }
+  .banner.info { background: #eaf3ff; color: #045; border: 1px solid #9cf; }
+  .banner.warn { background: #fff4e5; color: #740; border: 1px solid #fc9; }
+  .banner.ok { background: #eafaf0; color: #063; border: 1px solid #7d7; }
+
+  .stats { display: flex; gap: 12px; flex-wrap: wrap; margin: 0 0 16px; }
+  .stat { background: white; border-radius: 8px; padding: 10px 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+  .stat .num { font-size: 1.3em; font-weight: bold; }
+  .stat .label { font-size: 0.8em; color: #666; }
+
+  .layout { display: flex; gap: 16px; align-items: flex-start; }
+  .sidebar { flex: 0 0 180px; display: flex; flex-direction: column; gap: 6px; position: sticky; top: 16px; }
+  .group-btn { text-align: left; background: white; border: 2px solid transparent; border-radius: 8px; padding: 10px 12px; cursor: pointer; font-size: 0.95em; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+  .group-btn .count { float: right; color: #888; font-size: 0.85em; }
+  .group-btn.active { border-color: #06c; background: #eaf3ff; }
+  .content { flex: 1; min-width: 0; }
+  .group-panel { display: none; }
+  .group-panel.active { display: block; }
+  .empty-hint { color: #888; font-size: 0.9em; background: white; border-radius: 8px; padding: 16px; }
+  .empty-hint code { background: #eee; padding: 1px 5px; border-radius: 4px; }
+
+  .card { background: white; border-radius: 8px; padding: 12px 16px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+  .card.delisted { opacity: 0.55; }
+  .card.delisted .title { text-decoration: line-through; }
+  .title { font-size: 1.05em; font-weight: bold; text-decoration: none; color: #06c; }
+  .badge { display: inline-block; font-size: 0.75em; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
+  .badge.delisted { background: #999; color: white; }
+  .attrs { color: #444; font-size: 0.9em; margin: 4px 0; }
+  .attrs span { margin-right: 10px; }
+  .price { font-size: 1.1em; font-weight: bold; color: #c33; }
+  .note { font-size: 0.8em; color: #888; margin-top: 4px; }
+  form.review { margin-top: 8px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  form.review input[type=text] { flex: 1; min-width: 120px; padding: 4px 8px; }
+  button.want { background: #2a7; color: white; border: none; border-radius: 4px; padding: 4px 12px; cursor: pointer; }
+  button.pass { background: #999; color: white; border: none; border-radius: 4px; padding: 4px 12px; cursor: pointer; }
+  button.active { outline: 3px solid #333; }
+
+  @media (max-width: 640px) {
+    .layout { flex-direction: column; }
+    .sidebar { flex-direction: row; flex-wrap: wrap; position: static; width: 100%; }
+    .group-btn { flex: 1 1 auto; }
+    .add-group-inline input[name=name], .add-group-inline input[name=search_url] { width: auto; flex: 1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header-row">
+  <h1>台北房屋觀察簿</h1>
+  <div class="header-actions">
+    <form class="add-group-inline" method="post" action="/tracked-searches">
+      <input type="text" name="name" placeholder="名稱（例如：內湖電梯大樓）" required>
+      <input type="text" name="search_url" placeholder="591 搜尋網址" required>
+      <button type="submit">＋ 新增追蹤</button>
+    </form>
+    <form method="post" action="/run-now" id="run-now-form">
+      <button type="submit" class="run-now-btn">🔄 現在全部更新</button>
+    </form>
+  </div>
+</div>
+
+<div id="run-banner" class="banner"></div>
+
+<div class="layout">
+  <nav class="sidebar">
+    {% for group in groups %}
+    <button type="button" class="group-btn{% if loop.index0 == 0 %} active{% endif %}" data-group="{{ group.tracked_search_id }}">
+      {{ group.label }}<span class="count">{{ group.listings.len() }}</span>
+    </button>
+    {% endfor %}
+  </nav>
+
+  <main class="content">
+    {% for group in groups %}
+    <section class="group-panel{% if loop.index0 == 0 %} active{% endif %}" data-group="{{ group.tracked_search_id }}">
+      <h2>{{ group.label }}</h2>
+      <div class="stats">
+        <div class="stat"><div class="num">{{ group.stats.tracked_count }}</div><div class="label">追蹤中</div></div>
+        <div class="stat"><div class="num">{{ group.stats.new_today }}</div><div class="label">今日新增</div></div>
+        <div class="stat"><div class="num">{{ group.stats.reviewed_count }}</div><div class="label">已評價</div></div>
+        <div class="stat"><div class="num">{{ group.stats.want_count }}</div><div class="label">要的</div></div>
+        <div class="stat"><div class="num">{{ group.stats.delisted_count }}</div><div class="label">已下架</div></div>
+      </div>
+      {% if group.listings.is_empty() %}
+      <p class="empty-hint">還沒有抓過資料。點右上角「現在全部更新」手動跑一次，或等排程器在台北時間 08:00 自動執行。</p>
+      {% endif %}
+      {% for card in group.listings %}
+      <div class="card{% if card.delisted %} delisted{% endif %}">
+        <a class="title" href="{{ card.detail_url() }}" target="_blank" rel="noopener">{{ card.title }}</a>
+        {% if card.delisted %}<span class="badge delisted">已下架</span>{% endif %}
+
+        <div class="attrs">
+          <span class="price">{{ card.price }}萬</span>
+          <span>{{ card.unit_price }}萬/坪</span>
+          <span>{{ card.rooms }}</span>
+          <span>權狀{{ card.area }}坪</span>
+          {% if let Some(main_area) = card.main_area %}<span>主建{{ main_area }}坪</span>{% endif %}
+          {% if let Some(age) = card.age %}<span>{{ age }}年</span>{% endif %}
+          <span>{{ card.floor }}</span>
+        </div>
+        <div class="attrs">
+          {% if let Some(community) = card.community %}<span>{{ community }}</span>{% endif %}
+          <span>{{ card.address }}</span>
+          {% if let Some(agent) = card.agent %}<span>{{ agent }}</span>{% endif %}
+        </div>
+
+        {% if let Some(note) = card.note %}<div class="note">💬 {{ note }}</div>{% endif %}
+
+        <form class="review" method="post" action="/reviews">
+          <input type="hidden" name="tracked_search_id" value="{{ card.tracked_search_id }}">
+          <input type="hidden" name="listing_id" value="{{ card.id }}">
+          <input type="text" name="reason" placeholder="原因（選填）"
+                 value="{% if let Some(reason) = card.reason %}{{ reason }}{% endif %}">
+          <button type="submit" name="decision" value="want" class="want{% if card.decision_is("want") %} active{% endif %}">要</button>
+          <button type="submit" name="decision" value="pass" class="pass{% if card.decision_is("pass") %} active{% endif %}">不要</button>
+        </form>
+      </div>
+      {% endfor %}
+    </section>
+    {% endfor %}
+  </main>
+</div>
+
+<script>
+(function () {
+  var buttons = Array.prototype.slice.call(document.querySelectorAll('.group-btn'));
+  var panels = Array.prototype.slice.call(document.querySelectorAll('.group-panel'));
+
+  function select(groupId) {
+    buttons.forEach(function (b) { b.classList.toggle('active', b.dataset.group === groupId); });
+    panels.forEach(function (p) { p.classList.toggle('active', p.dataset.group === groupId); });
+  }
+
+  var requested = new URLSearchParams(location.search).get('group');
+  var hasRequested = requested && buttons.some(function (b) { return b.dataset.group === requested; });
+  if (hasRequested) {
+    select(requested);
+  }
+
+  buttons.forEach(function (b) {
+    b.addEventListener('click', function () { select(b.dataset.group); });
+  });
+
+  // --- 「現在全部更新」進度輪詢 + 完成通知 ---
+  var banner = document.getElementById('run-banner');
+  var runNowBtn = document.querySelector('.run-now-btn');
+
+  function showBanner(kind, text) {
+    banner.textContent = text;
+    banner.className = 'banner show ' + kind;
+  }
+
+  document.getElementById('run-now-form').addEventListener('submit', function () {
+    if (window.Notification && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  });
+
+  var updatingParam = new URLSearchParams(location.search).get('updating');
+  if (updatingParam === 'already') {
+    showBanner('warn', '已經有一輪更新在背景跑了（可能是排程或稍早的手動觸發），這次點擊沒有另外再啟動一輪。');
+  }
+
+  var everSeenRunning = false;
+
+  function poll() {
+    fetch('/run-status').then(function (r) { return r.json(); }).then(function (status) {
+      if (status.running) {
+        everSeenRunning = true;
+        if (runNowBtn) { runNowBtn.disabled = true; runNowBtn.textContent = '更新中…'; }
+        var progress = status.total > 0 ? (status.completed + '/' + status.total) : '';
+        var label = status.current_label ? '目前：' + status.current_label : '';
+        showBanner('info', ['正在背景更新', progress, label].filter(Boolean).join('　'));
+        setTimeout(poll, 2000);
+        return;
+      }
+
+      if (runNowBtn) { runNowBtn.disabled = false; runNowBtn.textContent = '🔄 現在全部更新'; }
+
+      if (everSeenRunning && status.last_result) {
+        var r = status.last_result;
+        var text = '✅ 更新完成：共 ' + r.total + ' 組' + (r.failed > 0 ? '，' + r.failed + ' 組失敗' : '，全部成功') + '。重新整理頁面查看最新結果。';
+        showBanner(r.failed > 0 ? 'warn' : 'ok', text);
+        if (window.Notification && Notification.permission === 'granted') {
+          new Notification('台北房屋觀察簿更新完成', { body: text });
+        }
+        everSeenRunning = false;
+      }
+
+      setTimeout(poll, 5000);
+    }).catch(function () {
+      setTimeout(poll, 5000);
+    });
+  }
+  poll();
+})();
+</script>
+
+</body>
+</html>

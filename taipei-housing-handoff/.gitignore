@@ -1,0 +1,10 @@
+/target
+# 資料庫本體要 commit 進去，換機器/換 Claude session 才不用重新從 data/ 匯入一次。
+# 只排除 SQLite 的暫存副檔案（正常關閉的話不會留下，但防呆一下)。
+*.db-journal
+*.db-shm
+*.db-wal
+.env
+
+# Windows/WSL 下載檔案的 zone-identifier 中繼資料，不是專案內容。
+*:Zone.Identifier

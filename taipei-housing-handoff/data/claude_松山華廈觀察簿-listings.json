@@ -1,0 +1,146 @@
+{
+  "searchUrl": "https://sale.591.com.tw/?regionid=1&section=4&kind=9&price=2000_3000&shape=5&area=30_40&firstRow=0&shType=list&pattern=3",
+  "artifactUrl": "https://claude.ai/artifacts/latest/8791be55-282d-4377-8e6a-4758d68b721c",
+  "criteria": "台北市松山區・住宅華廈・3房・權狀30-40坪・總價2,000-3,000萬",
+  "lastChecked": "2026-08-30",
+  "history": [
+    {
+      "date": "2026-08-25",
+      "newCount": 4,
+      "totalCount": 4,
+      "newIds": [
+        "20757762",
+        "20488348",
+        "20562854",
+        "20473076"
+      ]
+    },
+    {
+      "date": "2026-08-26",
+      "newCount": 1,
+      "totalCount": 5,
+      "newIds": [
+        "20646875"
+      ],
+      "delistedIds": [],
+      "note": "新增1筆刊登(20646875)，經比對為20473076同戶不同仲介重複刊登；原4戶皆仍在架"
+    },
+    {
+      "date": "2026-08-27",
+      "newCount": 1,
+      "totalCount": 6,
+      "newIds": [
+        "20799845"
+      ],
+      "delistedIds": [],
+      "note": "新增1筆刊登(20799845，仲介劉泓麟)，經比對為20473076同戶第三筆不同仲介重複刊登（地址/樓層/坪數/屋齡皆吻合）；代表刊登20473076仍在架，本次無下架。頁面另出現id 24960112，內容與20646875完全相同(24開頭追蹤連結)，非真實新刊登，不列入"
+    },
+    {
+      "date": "2026-08-30",
+      "newCount": 0,
+      "totalCount": 6,
+      "newIds": [],
+      "delistedIds": [],
+      "note": "手動觸發檢查（電腦重裝瀏覽器擴充功能後首次）。代表刊登20473076（南京三民捷運站電梯三房-有巢氏何亞凡）本身消失，但同戶重複刊登20646875、20799845皆仍在架，依規則判定非下架，代表轉移至現存最低id 20646875。其餘2筆代表刊登（20757762、20562854）今日皆仍在架，無下架。另有1筆24開頭追蹤連結24961095，內容與20562854完全相同，不列入listings。無新物件。因代表刊登id變動需合併使用者現有評價，尚待使用者提供目前Artifact頁面PDF/截圖以核對合併。 已升級為新樣板（含下架徽章支援），改發布為新連結：https://claude.ai/artifacts/latest/8791be55-282d-4377-8e6a-4758d68b721c（舊連結2cd1ab1a停用同步）。3筆評價經使用者提供PDF核對後原樣帶入：20757762(未評)、20562854(不要,民權東以北)、20646875(未評,原20473076位置轉移而來)。"
+    }
+  ],
+  "listings": [
+    {
+      "id": "20757762",
+      "title": "【冠軍獨家】南京三民捷運｜前陽台進出雙併華夏｜公設約15%",
+      "rooms": "3房2廳2衛",
+      "area": "31",
+      "mainArea": null,
+      "age": 45,
+      "floor": "4F/7F",
+      "community": "南京三民華夏",
+      "address": "松山區-南京東路五段",
+      "agent": "仲介劉展麟",
+      "unitPrice": 83.23,
+      "price": 2580,
+      "firstSeen": "2026-08-25",
+      "duplicateOf": null
+    },
+    {
+      "id": "20488348",
+      "title": "松山捷運景觀三房",
+      "rooms": "3房2廳2衛",
+      "area": "31.04",
+      "mainArea": null,
+      "age": 43,
+      "floor": "4F/7F",
+      "community": null,
+      "address": "松山區-民族東路",
+      "agent": "仲介陳筱昭",
+      "unitPrice": 92.78,
+      "price": 2880,
+      "firstSeen": "2026-08-25",
+      "duplicateOf": "20562854"
+    },
+    {
+      "id": "20562854",
+      "title": "🌈【屋主急售降】松機捷運電梯3房2650萬🌈無限棟距",
+      "rooms": "3房2廳",
+      "area": "31.04",
+      "mainArea": "22.33",
+      "age": 43,
+      "floor": "4F/7F",
+      "community": null,
+      "address": "松山區-民族東路",
+      "agent": "仲介楊秀全",
+      "unitPrice": 85.37,
+      "price": 2650,
+      "firstSeen": "2026-08-25",
+      "duplicateOf": null
+    },
+    {
+      "id": "20473076",
+      "title": "南京三民捷運站電梯三房-有巢氏何亞凡",
+      "rooms": "3房2廳2衛",
+      "area": "33.38",
+      "mainArea": "26.33",
+      "age": 42,
+      "floor": "4F/7F",
+      "community": null,
+      "address": "松山區-南京東路五段291巷",
+      "agent": "仲介何亞凡",
+      "unitPrice": 80.29,
+      "price": 2680,
+      "firstSeen": "2026-08-25",
+      "duplicateOf": "20646875"
+    },
+    {
+      "id": "20646875",
+      "title": "A案破盤價~南京三民電梯3房",
+      "rooms": "3房2廳2衛",
+      "area": "33.39",
+      "mainArea": "26.34",
+      "age": 42,
+      "floor": "4F/7F",
+      "community": null,
+      "address": "松山區-南京東路五段291巷",
+      "agent": "仲介盧省任",
+      "unitPrice": 80.26,
+      "price": 2680,
+      "firstSeen": "2026-08-26",
+      "duplicateOf": null
+    },
+    {
+      "id": "20799845",
+      "title": "南京三民捷運260公尺/公設比低使用空間大/近市場電梯三房",
+      "rooms": "3房2廳2衛",
+      "area": "33.38",
+      "mainArea": "26.33",
+      "age": 42,
+      "floor": "4F/7F",
+      "community": null,
+      "address": "松山區-南京東路五段291巷",
+      "agent": "仲介劉泓麟",
+      "unitPrice": 80.29,
+      "price": 2680,
+      "firstSeen": "2026-08-27",
+      "duplicateOf": "20646875"
+    }
+  ],
+  "dedupNote": "duplicateOf 指向同一戶被判定為代表性刊登的 id；為 null 表示這筆是觀察簿頁面上顯示的代表刊登。這個清單保留所有曾看過的 id（含被判定為重複的），只是為了讓每日排程判斷『新物件』時不會重複通知；觀察簿 Artifact 頁面上只顯示 duplicateOf 為 null 的物件。判斷時允許 area 有 0.1 坪內的誤差視為同一戶；同一戶降價前後的不同刊登（總價不同但地址/樓層/坪數吻合）也視為重複，取價格較低（較新）的那筆當代表。"
+}
