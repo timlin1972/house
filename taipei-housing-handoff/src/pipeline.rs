@@ -71,15 +71,8 @@ impl PipelineRunner {
     /// 目前沒有其他輪次在跑的話，在背景啟動一輪並立刻回傳 true；
     /// 已經有一輪在跑的話什麼都不做，回傳 false。
     pub fn try_spawn(&self) -> bool {
-        {
-            let mut s = self.status.lock().unwrap();
-            if s.running {
-                return false;
-            }
-            s.running = true;
-            s.total = 0;
-            s.completed = 0;
-            s.current_label = None;
+        if !self.mark_running_or_bail() {
+            return false;
         }
 
         let pool = self.pool.clone();
@@ -87,20 +80,57 @@ impl PipelineRunner {
         tokio::task::spawn_blocking(move || {
             tokio::runtime::Handle::current().block_on(async move {
                 let outcomes = run_all_tracked_searches_reporting(&pool, Some(&status)).await;
-                let failed = outcomes.iter().filter(|o| o.result.is_err()).count();
-                tracing::info!(total = outcomes.len(), failed, "這輪抓取跑完");
-
-                let mut s = status.lock().unwrap();
-                s.running = false;
-                s.current_label = None;
-                s.last_result = Some(LastResult {
-                    total: outcomes.len(),
-                    failed,
-                    finished_at: Utc::now().to_rfc3339(),
-                });
+                Self::finish(&status, outcomes);
             });
         });
         true
+    }
+
+    /// 跟 `try_spawn` 一樣的互斥/進度追蹤，但只跑單一組追蹤清單——共用同一個
+    /// `status`，所以「全部更新」跟「單組更新」不會同時搶同一個瀏覽器。
+    pub fn try_spawn_one(&self, tracked_search_id: i64) -> bool {
+        if !self.mark_running_or_bail() {
+            return false;
+        }
+
+        let pool = self.pool.clone();
+        let status = self.status.clone();
+        tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(async move {
+                let outcomes =
+                    run_single_tracked_search_reporting(&pool, tracked_search_id, Some(&status))
+                        .await;
+                Self::finish(&status, outcomes);
+            });
+        });
+        true
+    }
+
+    /// 沒有其他輪次在跑的話，把狀態標記成「跑起來了」並回傳 true；已經在跑就回傳 false。
+    fn mark_running_or_bail(&self) -> bool {
+        let mut s = self.status.lock().unwrap();
+        if s.running {
+            return false;
+        }
+        s.running = true;
+        s.total = 0;
+        s.completed = 0;
+        s.current_label = None;
+        true
+    }
+
+    fn finish(status: &Arc<Mutex<RunStatus>>, outcomes: Vec<RunOutcome>) {
+        let failed = outcomes.iter().filter(|o| o.result.is_err()).count();
+        tracing::info!(total = outcomes.len(), failed, "這輪抓取跑完");
+
+        let mut s = status.lock().unwrap();
+        s.running = false;
+        s.current_label = None;
+        s.last_result = Some(LastResult {
+            total: outcomes.len(),
+            failed,
+            finished_at: Utc::now().to_rfc3339(),
+        });
     }
 }
 
@@ -134,33 +164,9 @@ async fn run_all_tracked_searches_reporting(
         status.lock().unwrap().total = groups.len();
     }
 
-    // headless_chrome 沒指定 path 時，找不到系統瀏覽器就會自動下載一份 x86_64 版
-    // Chromium——在 ARM 機器（例如這台樹莓派）上跑起來會是 `Exec format error`。
-    // 先試系統裝好的 chromium/google-chrome，找不到才讓 headless_chrome 自己處理。
-    let chrome_path = std::env::var_os("CHROME_PATH")
-        .map(std::path::PathBuf::from)
-        .or_else(|| {
-            ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable"]
-                .iter()
-                .find_map(|name| which::which(name).ok())
-        });
-    let launch_options = match LaunchOptionsBuilder::default()
-        .sandbox(false)
-        .path(chrome_path)
-        .build()
-    {
-        Ok(o) => o,
-        Err(e) => {
-            tracing::error!(error = %e, "建立 headless_chrome LaunchOptions 失敗");
-            return Vec::new();
-        }
-    };
-    let browser = match Browser::new(launch_options) {
+    let browser = match open_browser() {
         Ok(b) => b,
-        Err(e) => {
-            tracing::error!(error = %e, "啟動 headless_chrome 失敗");
-            return Vec::new();
-        }
+        Err(_) => return Vec::new(),
     };
 
     let checked_date = Utc::now().with_timezone(&Taipei).date_naive();
@@ -194,6 +200,85 @@ async fn run_all_tracked_searches_reporting(
     }
 
     outcomes
+}
+
+/// 側邊欄單一組「更新」按鈕的進入點：只抓那一組，不動其他組。
+async fn run_single_tracked_search_reporting(
+    pool: &SqlitePool,
+    tracked_search_id: i64,
+    status: Option<&Arc<Mutex<RunStatus>>>,
+) -> Vec<RunOutcome> {
+    let row: Option<(String, String, String, String)> = match sqlx::query_as(
+        "SELECT district, building_type, price_range, search_url FROM tracked_searches WHERE id = ?",
+    )
+    .bind(tracked_search_id)
+    .fetch_optional(pool)
+    .await
+    {
+        Ok(row) => row,
+        Err(e) => {
+            tracing::error!(tracked_search_id, error = %e, "讀取這組追蹤清單失敗，取消更新");
+            return Vec::new();
+        }
+    };
+
+    let Some((district, building_type, price_range, search_url)) = row else {
+        tracing::error!(tracked_search_id, "找不到這組追蹤清單，取消更新");
+        return Vec::new();
+    };
+
+    let label = format!("{district}{building_type}{price_range}");
+    tracing::info!(label = %label, "開始抓取（單組）");
+    if let Some(status) = status {
+        let mut s = status.lock().unwrap();
+        s.total = 1;
+        s.current_label = Some(label.clone());
+    }
+
+    let browser = match open_browser() {
+        Ok(b) => b,
+        Err(_) => return Vec::new(),
+    };
+    let checked_date = Utc::now().with_timezone(&Taipei).date_naive();
+
+    let result = run_one(&browser, pool, tracked_search_id, &search_url, checked_date).await;
+    if let Err(e) = &result {
+        tracing::error!(label = %label, error = %e, "這組抓取/對帳失敗");
+    }
+    if let Some(status) = status {
+        status.lock().unwrap().completed = 1;
+    }
+
+    vec![RunOutcome {
+        tracked_search_id,
+        label,
+        result,
+    }]
+}
+
+/// headless_chrome 沒指定 path 時，找不到系統瀏覽器就會自動下載一份 x86_64 版
+/// Chromium——在 ARM 機器（例如這台樹莓派）上跑起來會是 `Exec format error`。
+/// 先試系統裝好的 chromium/google-chrome，找不到才讓 headless_chrome 自己處理。
+fn open_browser() -> Result<Browser> {
+    let chrome_path = std::env::var_os("CHROME_PATH")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable"]
+                .iter()
+                .find_map(|name| which::which(name).ok())
+        });
+    let launch_options = LaunchOptionsBuilder::default()
+        .sandbox(false)
+        .path(chrome_path)
+        .build()
+        .map_err(|e| {
+            tracing::error!(error = %e, "建立 headless_chrome LaunchOptions 失敗");
+            anyhow::anyhow!("{e}")
+        })?;
+    Browser::new(launch_options).map_err(|e| {
+        tracing::error!(error = %e, "啟動 headless_chrome 失敗");
+        e
+    })
 }
 
 async fn run_one(
