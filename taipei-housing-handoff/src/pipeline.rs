@@ -134,7 +134,21 @@ async fn run_all_tracked_searches_reporting(
         status.lock().unwrap().total = groups.len();
     }
 
-    let launch_options = match LaunchOptionsBuilder::default().sandbox(false).build() {
+    // headless_chrome 沒指定 path 時，找不到系統瀏覽器就會自動下載一份 x86_64 版
+    // Chromium——在 ARM 機器（例如這台樹莓派）上跑起來會是 `Exec format error`。
+    // 先試系統裝好的 chromium/google-chrome，找不到才讓 headless_chrome 自己處理。
+    let chrome_path = std::env::var_os("CHROME_PATH")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable"]
+                .iter()
+                .find_map(|name| which::which(name).ok())
+        });
+    let launch_options = match LaunchOptionsBuilder::default()
+        .sandbox(false)
+        .path(chrome_path)
+        .build()
+    {
         Ok(o) => o,
         Err(e) => {
             tracing::error!(error = %e, "建立 headless_chrome LaunchOptions 失敗");

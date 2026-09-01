@@ -26,6 +26,7 @@ dotenvy = "0.15"
 
 # --- 抓取層（待辦②③：591無公開API，改用headless browser直接讀DOM）---
 headless_chrome = { version = "1.0.22", features = ["fetch"] }
+which = "8.0.6"
 
 # --- 排程 + Web 前端（待辦④）---
 tokio-cron-scheduler = "0.15.1"

@@ -92,9 +92,18 @@ cargo test                     # dedup 的規則測試 + delist 對帳邏輯的�
 
 ## 全新機器上要注意
 
-- **headless_chrome 第一次用會自動下載 Chromium**（~150-250MB，存在
-  `~/.local/share/headless-chrome/`，這個目錄**不在 repo 裡、也不會跟著 git 走**，全新機器
-  第一次跑 `run-once`/`taipei-housing` 都要重新下載）。
+- **ARM 機器（樹莓派等）不能用 headless_chrome 內建的自動下載**：`headless_chrome`（開了
+  `fetch` feature）在 Linux 上 `path` 沒設定時一律下載 x86_64 版 Chromium，完全沒有依 arch
+  判斷（看過 crate 原始碼 `browser/process.rs`／`browser/fetcher.rs` 確認過），在 aarch64
+  上執行會是 `啟動 headless_chrome 失敗 error=Exec format error (os error 8)`。
+  `pipeline.rs` 已經改成：先用 `which` 找系統裝好的 `chromium`/`chromium-browser`/
+  `google-chrome`/`google-chrome-stable`（也可以用 `CHROME_PATH` 環境變數指定），找不到才
+  falls back 給 headless_chrome 自己的下載邏輯。ARM 機器要先 `sudo apt-get install chromium`
+  （Raspberry Pi OS 內建就有）。
+- **headless_chrome 第一次用會自動下載 Chromium**（沒有系統瀏覽器可用時才會走這條路；
+  ~150-250MB，存在 `~/.local/share/headless-chrome/`，這個目錄**不在 repo 裡、也不會跟著
+  git 走**，全新機器第一次跑 `run-once`/`taipei-housing` 都要重新下載——x86_64 機器沒裝
+  系統瀏覽器也能用這個）。
 - **Chromium 執行需要系統函式庫**，缺的話會報 `error while loading shared libraries: libnss3.so...`。
   Ubuntu/Debian 系列先跑：
   ```
