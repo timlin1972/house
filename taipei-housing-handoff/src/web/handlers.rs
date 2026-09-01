@@ -55,6 +55,7 @@ struct ListingRow {
     note: Option<String>,
     decision: Option<String>,
     reason: Option<String>,
+    first_seen: chrono::NaiveDate,
 }
 
 async fn render_index(state: &AppState) -> anyhow::Result<String> {
@@ -80,12 +81,14 @@ async fn render_index(state: &AppState) -> anyhow::Result<String> {
     .into_iter()
     .collect();
 
-    let reviewed_counts: HashMap<i64, i64> =
-        sqlx::query_as("SELECT tracked_search_id, COUNT(*) FROM reviews GROUP BY tracked_search_id")
-            .fetch_all(&state.pool)
-            .await?
-            .into_iter()
-            .collect();
+    let reviewed_counts: HashMap<i64, i64> = sqlx::query_as(
+        "SELECT tracked_search_id, COUNT(*) FROM reviews
+         WHERE decision IS NOT NULL GROUP BY tracked_search_id",
+    )
+    .fetch_all(&state.pool)
+    .await?
+    .into_iter()
+    .collect();
 
     let want_counts: HashMap<i64, i64> = sqlx::query_as(
         "SELECT tracked_search_id, COUNT(*) FROM reviews
@@ -134,7 +137,7 @@ async fn render_index(state: &AppState) -> anyhow::Result<String> {
         "SELECT
             l.tracked_search_id, l.id, l.title, l.price, l.unit_price, l.rooms, l.area,
             l.main_area, l.age, l.floor, l.community, l.address, l.agent, l.delisted, l.note,
-            r.decision, r.reason
+            r.decision, r.reason, l.first_seen
          FROM listings l
          LEFT JOIN reviews r ON r.tracked_search_id = l.tracked_search_id AND r.listing_id = l.id
          WHERE l.duplicate_of IS NULL
@@ -162,6 +165,7 @@ async fn render_index(state: &AppState) -> anyhow::Result<String> {
             note: row.note,
             decision: row.decision,
             reason: row.reason,
+            is_new_today: row.first_seen == today,
         };
 
         if let Some(g) = groups.iter_mut().find(|g| g.tracked_search_id == row.tracked_search_id) {
@@ -192,13 +196,19 @@ pub async fn run_status(State(state): State<AppState>) -> Response {
 pub struct ReviewForm {
     tracked_search_id: i64,
     listing_id: String,
-    decision: String,
+    // 點「要/不要」按鈕才會帶這個欄位（真的送出的 <form> submit，會整頁導回）；
+    // 只是打原因欄位觸發的 AJAX 自動存檔則完全不帶這個欄位，代表「不動 decision，只存 reason」。
+    #[serde(default)]
+    decision: Option<String>,
+    #[serde(default)]
     reason: String,
 }
 
 pub async fn submit_review(State(state): State<AppState>, Form(form): Form<ReviewForm>) -> Response {
-    if form.decision != "want" && form.decision != "pass" {
-        return (StatusCode::BAD_REQUEST, "decision 必須是 want 或 pass").into_response();
+    if let Some(d) = &form.decision {
+        if d != "want" && d != "pass" {
+            return (StatusCode::BAD_REQUEST, "decision 必須是 want 或 pass").into_response();
+        }
     }
 
     let reason = if form.reason.trim().is_empty() {
@@ -207,23 +217,46 @@ pub async fn submit_review(State(state): State<AppState>, Form(form): Form<Revie
         Some(form.reason.trim().to_string())
     };
 
-    let result = sqlx::query(
-        "INSERT INTO reviews (tracked_search_id, listing_id, decision, reason)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(tracked_search_id, listing_id) DO UPDATE SET
-            decision = excluded.decision, reason = excluded.reason,
-            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')",
-    )
-    .bind(form.tracked_search_id)
-    .bind(&form.listing_id)
-    .bind(&form.decision)
-    .bind(&reason)
-    .execute(&state.pool)
-    .await;
+    let result = match &form.decision {
+        Some(decision) => {
+            sqlx::query(
+                "INSERT INTO reviews (tracked_search_id, listing_id, decision, reason)
+                 VALUES (?, ?, ?, ?)
+                 ON CONFLICT(tracked_search_id, listing_id) DO UPDATE SET
+                    decision = excluded.decision, reason = excluded.reason,
+                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')",
+            )
+            .bind(form.tracked_search_id)
+            .bind(&form.listing_id)
+            .bind(decision)
+            .bind(&reason)
+            .execute(&state.pool)
+            .await
+        }
+        // decision 沒有帶，只更新 reason、保留原本（可能還是 NULL）的 decision 不動。
+        None => {
+            sqlx::query(
+                "INSERT INTO reviews (tracked_search_id, listing_id, decision, reason)
+                 VALUES (?, ?, NULL, ?)
+                 ON CONFLICT(tracked_search_id, listing_id) DO UPDATE SET
+                    reason = excluded.reason,
+                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')",
+            )
+            .bind(form.tracked_search_id)
+            .bind(&form.listing_id)
+            .bind(&reason)
+            .execute(&state.pool)
+            .await
+        }
+    };
 
     match result {
-        // 帶回 group 參數，讓評價完重新整理頁面時停在原本選的那個分頁，不用每次都跳回第一組。
-        Ok(_) => Redirect::to(&format!("/?group={}", form.tracked_search_id)).into_response(),
+        // decision 按鈕點擊來的是真的整頁 form submit，導回原本分頁；
+        // 只存 reason 的 AJAX 呼叫不需要導頁，回 204 就好。
+        Ok(_) if form.decision.is_some() => {
+            Redirect::to(&format!("/?group={}", form.tracked_search_id)).into_response()
+        }
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => {
             tracing::error!(error = %e, "寫入評價失敗");
             (StatusCode::INTERNAL_SERVER_ERROR, "寫入評價失敗").into_response()

@@ -659,7 +659,7 @@ async fn move_review(
     old_id: &str,
     new_id: &str,
 ) -> Result<()> {
-    let existing_review: Option<(String, Option<String>)> = sqlx::query_as(
+    let existing_review: Option<(Option<String>, Option<String>)> = sqlx::query_as(
         "SELECT decision, reason FROM reviews WHERE tracked_search_id = ? AND listing_id = ?",
     )
     .bind(tracked_search_id)

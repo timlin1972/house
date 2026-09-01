@@ -18,6 +18,7 @@ pub struct ListingCard {
     pub note: Option<String>,
     pub decision: Option<String>,
     pub reason: Option<String>,
+    pub is_new_today: bool,
 }
 
 impl ListingCard {

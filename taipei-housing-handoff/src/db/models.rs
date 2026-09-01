@@ -85,7 +85,7 @@ pub enum ReviewDecision {
 pub struct Review {
     pub tracked_search_id: i64,
     pub listing_id: String,
-    pub decision: ReviewDecision,
+    pub decision: Option<ReviewDecision>,
     pub reason: Option<String>,
     pub updated_at: DateTime<Utc>,
 }

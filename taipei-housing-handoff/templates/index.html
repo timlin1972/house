@@ -41,12 +41,12 @@
   .empty-hint { color: #888; font-size: 0.9em; background: white; border-radius: 8px; padding: 16px; }
   .empty-hint code { background: #eee; padding: 1px 5px; border-radius: 4px; }
 
-  .card { background: white; border-radius: 8px; padding: 12px 16px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+  .card { position: relative; background: white; border-radius: 8px; padding: 12px 16px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
   .card.delisted { opacity: 0.55; }
   .card.delisted .title { text-decoration: line-through; }
+  .new-today-badge { position: absolute; top: -8px; left: 12px; background: #e63; color: white; font-size: 0.75em; font-weight: bold; padding: 2px 8px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+  .delisted-badge { position: absolute; top: -8px; right: 12px; background: #999; color: white; font-size: 0.75em; font-weight: bold; padding: 2px 8px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
   .title { font-size: 1.05em; font-weight: bold; text-decoration: none; color: #06c; }
-  .badge { display: inline-block; font-size: 0.75em; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
-  .badge.delisted { background: #999; color: white; }
   .attrs { color: #444; font-size: 0.9em; margin: 4px 0; }
   .attrs span { margin-right: 10px; }
   .price { font-size: 1.1em; font-weight: bold; color: #c33; }
@@ -56,6 +56,8 @@
   button.want { background: #2a7; color: white; border: none; border-radius: 4px; padding: 4px 12px; cursor: pointer; }
   button.pass { background: #999; color: white; border: none; border-radius: 4px; padding: 4px 12px; cursor: pointer; }
   button.active { outline: 3px solid #333; }
+  .reason-saved-hint { font-size: 0.8em; color: #2a7; opacity: 0; transition: opacity 0.2s; }
+  .reason-saved-hint.show { opacity: 1; }
 
   @media (max-width: 640px) {
     .layout { flex-direction: column; }
@@ -108,8 +110,9 @@
       {% endif %}
       {% for card in group.listings %}
       <div class="card{% if card.delisted %} delisted{% endif %}">
+        {% if card.is_new_today %}<span class="new-today-badge">今日新增</span>{% endif %}
+        {% if card.delisted %}<span class="delisted-badge">已下架</span>{% endif %}
         <a class="title" href="{{ card.detail_url() }}" target="_blank" rel="noopener">{{ card.title }}</a>
-        {% if card.delisted %}<span class="badge delisted">已下架</span>{% endif %}
 
         <div class="attrs">
           <span class="price">{{ card.price }}萬</span>
@@ -131,8 +134,9 @@
         <form class="review" method="post" action="/reviews">
           <input type="hidden" name="tracked_search_id" value="{{ card.tracked_search_id }}">
           <input type="hidden" name="listing_id" value="{{ card.id }}">
-          <input type="text" name="reason" placeholder="原因（選填）"
+          <input type="text" name="reason" class="reason-input" placeholder="原因（選填，打完離開輸入框就會自動存）"
                  value="{% if let Some(reason) = card.reason %}{{ reason }}{% endif %}">
+          <span class="reason-saved-hint">已存</span>
           <button type="submit" name="decision" value="want" class="want{% if card.decision_is("want") %} active{% endif %}">要</button>
           <button type="submit" name="decision" value="pass" class="pass{% if card.decision_is("pass") %} active{% endif %}">不要</button>
         </form>
@@ -215,6 +219,41 @@
     });
   }
   poll();
+})();
+</script>
+
+<script>
+(function () {
+  // 原因欄位自己獨立自動存檔，不需要等使用者按「要/不要」——那兩個按鈕還是原本的
+  // form submit（整頁導回），這裡只處理「打完原因、離開輸入框」這個額外的存檔路徑。
+  document.querySelectorAll('form.review').forEach(function (form) {
+    var input = form.querySelector('.reason-input');
+    var hint = form.querySelector('.reason-saved-hint');
+    var lastSaved = input.value;
+    var hintTimer;
+
+    input.addEventListener('blur', function (e) {
+      // 失焦是因為點了同一張卡片的「要/不要」按鈕的話，交給那個按鈕自己的 form submit
+      // 一起把 reason 存進去，這裡不用再多送一次。
+      if (e.relatedTarget && form.contains(e.relatedTarget)) return;
+      if (input.value === lastSaved) return;
+
+      var body = new URLSearchParams();
+      body.set('tracked_search_id', form.querySelector('[name=tracked_search_id]').value);
+      body.set('listing_id', form.querySelector('[name=listing_id]').value);
+      body.set('reason', input.value);
+
+      fetch('/reviews', { method: 'POST', body: body }).then(function (r) {
+        if (!r.ok) throw new Error('save failed: ' + r.status);
+        lastSaved = input.value;
+        hint.classList.add('show');
+        clearTimeout(hintTimer);
+        hintTimer = setTimeout(function () { hint.classList.remove('show'); }, 1500);
+      }).catch(function (err) {
+        console.error('原因自動存檔失敗', err);
+      });
+    });
+  });
 })();
 </script>
 
