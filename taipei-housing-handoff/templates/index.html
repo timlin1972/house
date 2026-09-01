@@ -7,7 +7,9 @@
 <style>
   body { font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif; margin: 0; padding: 16px; background: #f5f5f5; color: #222; }
   h1 { font-size: 1.4em; margin: 0; }
-  h2 { font-size: 1.1em; margin: 0 0 12px; border-bottom: 2px solid #ddd; padding-bottom: 4px; }
+  h2 { font-size: 1.1em; margin: 0; }
+  .group-title-row { display: flex; align-items: center; gap: 8px; border-bottom: 2px solid #ddd; padding-bottom: 4px; margin: 0 0 12px; }
+  .search-url-link { flex: 0 0 auto; font-size: 1em; line-height: 1; color: #06c; text-decoration: none; }
 
   .header-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
   .header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -32,9 +34,15 @@
 
   .layout { display: flex; gap: 16px; align-items: flex-start; }
   .sidebar { flex: 0 0 180px; display: flex; flex-direction: column; gap: 6px; position: sticky; top: 16px; }
-  .group-btn { text-align: left; background: white; border: 2px solid transparent; border-radius: 8px; padding: 10px 12px; cursor: pointer; font-size: 0.95em; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+  .group-item { display: flex; gap: 4px; align-items: stretch; }
+  .group-btn { flex: 1; min-width: 0; text-align: left; background: white; border: 2px solid transparent; border-radius: 8px; padding: 10px 12px; cursor: pointer; font-size: 0.95em; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
   .group-btn .count { float: right; color: #888; font-size: 0.85em; }
   .group-btn.active { border-color: #06c; background: #eaf3ff; }
+  .group-refresh-form, .group-delete-form { flex: 0 0 auto; }
+  .group-refresh-btn { height: 100%; background: white; color: #06c; border: 1px solid #ccc; border-radius: 8px; padding: 0 10px; cursor: pointer; font-size: 0.8em; white-space: nowrap; }
+  .group-refresh-btn:disabled { color: #999; cursor: default; }
+  .group-delete-btn { height: 100%; background: white; color: #c33; border: 1px solid #ccc; border-radius: 8px; padding: 0 8px; cursor: pointer; font-size: 0.85em; }
+  .group-delete-btn:disabled { color: #999; cursor: default; }
   .content { flex: 1; min-width: 0; }
   .group-panel { display: none; }
   .group-panel.active { display: block; }
@@ -42,6 +50,9 @@
   .empty-hint code { background: #eee; padding: 1px 5px; border-radius: 4px; }
 
   .card { position: relative; background: white; border-radius: 8px; padding: 12px 16px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+  .card.wanted { background: #e6f7ec; }
+  .card.passed { background: #e5e5e5; }
+  .card.undecided { background: #fdeaf0; }
   .card.delisted { opacity: 0.55; }
   .card.delisted .title { text-decoration: line-through; }
   .new-today-badge { position: absolute; top: -8px; left: 12px; background: #e63; color: white; font-size: 0.75em; font-weight: bold; padding: 2px 8px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
@@ -88,16 +99,27 @@
 <div class="layout">
   <nav class="sidebar">
     {% for group in groups %}
-    <button type="button" class="group-btn{% if loop.index0 == 0 %} active{% endif %}" data-group="{{ group.tracked_search_id }}">
-      {{ group.label }}<span class="count">{{ group.listings.len() }}</span>
-    </button>
+    <div class="group-item">
+      <button type="button" class="group-btn{% if loop.index0 == 0 %} active{% endif %}" data-group="{{ group.tracked_search_id }}">
+        {{ group.label }}<span class="count">{{ group.listings.len() }}</span>
+      </button>
+      <form method="post" action="/tracked-searches/{{ group.tracked_search_id }}/refresh" class="group-refresh-form">
+        <button type="submit" class="group-refresh-btn" data-label="{{ group.label }}" title="只更新「{{ group.label }}」這組">更新</button>
+      </form>
+      <form method="post" action="/tracked-searches/{{ group.tracked_search_id }}/delete" class="group-delete-form" data-label="{{ group.label }}">
+        <button type="submit" class="group-delete-btn" title="刪除「{{ group.label }}」這組追蹤">🗑</button>
+      </form>
+    </div>
     {% endfor %}
   </nav>
 
   <main class="content">
     {% for group in groups %}
     <section class="group-panel{% if loop.index0 == 0 %} active{% endif %}" data-group="{{ group.tracked_search_id }}">
-      <h2>{{ group.label }}</h2>
+      <div class="group-title-row">
+        <a class="search-url-link" href="{{ group.search_url }}" target="_blank" rel="noopener" title="開啟原始搜尋網址">🔗</a>
+        <h2>{{ group.label }}</h2>
+      </div>
       <div class="stats">
         <div class="stat"><div class="num">{{ group.stats.tracked_count }}</div><div class="label">追蹤中</div></div>
         <div class="stat"><div class="num">{{ group.stats.new_today }}</div><div class="label">今日新增</div></div>
@@ -109,7 +131,7 @@
       <p class="empty-hint">還沒有抓過資料。點右上角「現在全部更新」手動跑一次，或等排程器在台北時間 08:00 自動執行。</p>
       {% endif %}
       {% for card in group.listings %}
-      <div class="card{% if card.delisted %} delisted{% endif %}">
+      <div class="card {{ card.decision_class() }}{% if card.delisted %} delisted{% endif %}">
         {% if card.is_new_today %}<span class="new-today-badge">今日新增</span>{% endif %}
         {% if card.delisted %}<span class="delisted-badge">已下架</span>{% endif %}
         <a class="title" href="{{ card.detail_url() }}" target="_blank" rel="noopener">{{ card.title }}</a>
@@ -167,19 +189,36 @@
     b.addEventListener('click', function () { select(b.dataset.group); });
   });
 
+  // 刪除是不可逆操作（這組所有物件/評價/抓取紀錄都會一起沒了），送出前一定要再確認一次。
+  document.querySelectorAll('.group-delete-form').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      var label = form.dataset.label;
+      if (!window.confirm('確定要刪除「' + label + '」這組追蹤嗎？\n所有物件、評價、抓取紀錄都會一併刪除，無法復原。')) {
+        e.preventDefault();
+      }
+    });
+  });
+
   // --- 「現在全部更新」進度輪詢 + 完成通知 ---
   var banner = document.getElementById('run-banner');
   var runNowBtn = document.querySelector('.run-now-btn');
+  var refreshBtns = Array.prototype.slice.call(document.querySelectorAll('.group-refresh-btn'));
+  var deleteBtns = Array.prototype.slice.call(document.querySelectorAll('.group-delete-btn'));
 
   function showBanner(kind, text) {
     banner.textContent = text;
     banner.className = 'banner show ' + kind;
   }
 
-  document.getElementById('run-now-form').addEventListener('submit', function () {
+  function requestNotificationPermission() {
     if (window.Notification && Notification.permission === 'default') {
       Notification.requestPermission();
     }
+  }
+
+  document.getElementById('run-now-form').addEventListener('submit', requestNotificationPermission);
+  document.querySelectorAll('.group-refresh-form').forEach(function (form) {
+    form.addEventListener('submit', requestNotificationPermission);
   });
 
   var updatingParam = new URLSearchParams(location.search).get('updating');
@@ -194,6 +233,15 @@
       if (status.running) {
         everSeenRunning = true;
         if (runNowBtn) { runNowBtn.disabled = true; runNowBtn.textContent = '更新中…'; }
+        // 只有真正在跑的那組（跟 current_label 對上）才顯示「更新中」，其他組只是
+        // 因為共用同一個 mutex 暫時不能點，不是也在跑，文字不能跟著改，不然會誤導。
+        refreshBtns.forEach(function (b) {
+          b.disabled = true;
+          b.textContent = (status.current_label && b.dataset.label === status.current_label) ? '更新中…' : '更新';
+        });
+        // 抓取跑到一半刪掉那組會撞到資料庫外鍵（tracked_searches 沒了但還在寫 listings），
+        // 乾脆連刪除也一起鎖住，等這輪跑完再開放。
+        deleteBtns.forEach(function (b) { b.disabled = true; });
         var progress = status.total > 0 ? (status.completed + '/' + status.total) : '';
         var label = status.current_label ? '目前：' + status.current_label : '';
         showBanner('info', ['正在背景更新', progress, label].filter(Boolean).join('　'));
@@ -202,6 +250,8 @@
       }
 
       if (runNowBtn) { runNowBtn.disabled = false; runNowBtn.textContent = '🔄 現在全部更新'; }
+      refreshBtns.forEach(function (b) { b.disabled = false; b.textContent = '更新'; });
+      deleteBtns.forEach(function (b) { b.disabled = false; });
 
       if (everSeenRunning && status.last_result) {
         var r = status.last_result;

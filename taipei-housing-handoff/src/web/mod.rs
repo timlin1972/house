@@ -20,5 +20,7 @@ pub fn router(pool: SqlitePool, runner: PipelineRunner) -> Router {
         .route("/tracked-searches", post(handlers::add_tracked_search))
         .route("/run-now", post(handlers::run_now))
         .route("/run-status", get(handlers::run_status))
+        .route("/tracked-searches/{id}/refresh", post(handlers::refresh_one))
+        .route("/tracked-searches/{id}/delete", post(handlers::delete_tracked_search))
         .with_state(AppState { pool, runner })
 }

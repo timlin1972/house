@@ -29,11 +29,21 @@ impl ListingCard {
     pub fn decision_is(&self, want: &str) -> bool {
         self.decision.as_deref() == Some(want)
     }
+
+    /// 卡片底色用的 class：要/不要/還沒評價各一種顏色。
+    pub fn decision_class(&self) -> &'static str {
+        match self.decision.as_deref() {
+            Some("want") => "wanted",
+            Some("pass") => "passed",
+            _ => "undecided",
+        }
+    }
 }
 
 pub struct Group {
     pub tracked_search_id: i64,
     pub label: String,
+    pub search_url: String,
     pub stats: Stats,
     pub listings: Vec<ListingCard>,
 }

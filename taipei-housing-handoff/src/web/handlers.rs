@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use askama::Template;
-use axum::extract::{Form, State};
+use axum::extract::{Form, Path, State};
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use chrono::Utc;
@@ -28,6 +28,7 @@ struct TrackedSearchRow {
     building_type: String,
     price_range: String,
     name: Option<String>,
+    search_url: String,
 }
 
 fn group_label(row: &TrackedSearchRow) -> String {
@@ -99,9 +100,13 @@ async fn render_index(state: &AppState) -> anyhow::Result<String> {
     .into_iter()
     .collect();
 
+    // 這裡故意不用 check_runs.new_count（那是抓取當下所有「新出現的 591 id」，包含
+    // 同一戶被別的仲介重複刊登、換id轉移這些去重前的雜訊）——改成跟卡片上單筆
+    // 「今日新增」徽章同一套去重後的判斷：只算還在架上的「代表」物件裡，today 第一次
+    // 出現的那些，數字才會跟畫面上實際看到的今日新增卡片數一致。
     let new_today_counts: HashMap<i64, i64> = sqlx::query_as(
-        "SELECT tracked_search_id, SUM(new_count) FROM check_runs
-         WHERE checked_date = ? GROUP BY tracked_search_id",
+        "SELECT tracked_search_id, COUNT(*) FROM listings
+         WHERE duplicate_of IS NULL AND delisted = 0 AND first_seen = ? GROUP BY tracked_search_id",
     )
     .bind(today.to_string())
     .fetch_all(&state.pool)
@@ -112,7 +117,7 @@ async fn render_index(state: &AppState) -> anyhow::Result<String> {
     // 先把所有追蹤清單都列出來（就算還沒抓過、一筆物件都沒有），新增的清單才會馬上在
     // 側邊欄看到，不用等排程跑過一次才出現。
     let tracked_searches: Vec<TrackedSearchRow> = sqlx::query_as(
-        "SELECT id, district, building_type, price_range, name FROM tracked_searches ORDER BY id",
+        "SELECT id, district, building_type, price_range, name, search_url FROM tracked_searches ORDER BY id",
     )
     .fetch_all(&state.pool)
     .await?;
@@ -122,6 +127,7 @@ async fn render_index(state: &AppState) -> anyhow::Result<String> {
         .map(|ts| Group {
             tracked_search_id: ts.id,
             label: group_label(ts),
+            search_url: ts.search_url.clone(),
             stats: Stats {
                 tracked_count: *tracked_counts.get(&ts.id).unwrap_or(&0),
                 new_today: *new_today_counts.get(&ts.id).unwrap_or(&0),
@@ -190,6 +196,61 @@ pub async fn run_now(State(state): State<AppState>) -> Response {
 /// 給頁面 JS 輪詢用的進度查詢，回傳目前是否還在跑、跑到第幾組、上一輪的結果。
 pub async fn run_status(State(state): State<AppState>) -> Response {
     axum::Json(state.runner.status()).into_response()
+}
+
+/// 側邊欄單一組「更新」按鈕的進入點，只重跑那一組，跟「現在全部更新」共用同一個
+/// mutex（`try_spawn_one`），不會跟全部更新或別組的單獨更新同時搶同一個瀏覽器。
+pub async fn refresh_one(State(state): State<AppState>, Path(id): Path<i64>) -> Response {
+    if state.runner.try_spawn_one(id) {
+        Redirect::to(&format!("/?group={id}&updating=started")).into_response()
+    } else {
+        Redirect::to(&format!("/?group={id}&updating=already")).into_response()
+    }
+}
+
+/// 側邊欄單一組「刪除」按鈕的進入點，連同這組所有物件、評價、抓取紀錄一起刪掉。
+/// 刪掉的組不再存在，沒有分頁可以導回，直接回首頁（預設選第一組）。
+pub async fn delete_tracked_search(State(state): State<AppState>, Path(id): Path<i64>) -> Response {
+    match delete_tracked_search_tx(&state.pool, id).await {
+        Ok(()) => {
+            tracing::info!(id, "刪除追蹤清單");
+            Redirect::to("/").into_response()
+        }
+        Err(e) => {
+            tracing::error!(id, error = %e, "刪除追蹤清單失敗");
+            (StatusCode::INTERNAL_SERVER_ERROR, "刪除失敗").into_response()
+        }
+    }
+}
+
+async fn delete_tracked_search_tx(pool: &sqlx::sqlite::SqlitePool, id: i64) -> anyhow::Result<()> {
+    let mut tx = pool.begin().await?;
+    // 跟 import_json.rs 清空重建同一組資料時同一招：defer_foreign_keys 把 FK 檢查延到
+    // commit 時才做，這幾張互相參照的表（listings 自參照 duplicate_of、check_runs 跟
+    // listings.last_seen_check_run_id 互相參照）刪除順序才不用管。
+    sqlx::query("PRAGMA defer_foreign_keys = ON;").execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM check_run_events WHERE tracked_search_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM check_runs WHERE tracked_search_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM reviews WHERE tracked_search_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM listings WHERE tracked_search_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM tracked_searches WHERE id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
